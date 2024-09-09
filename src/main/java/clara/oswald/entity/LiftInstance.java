@@ -7,6 +7,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
+import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
@@ -30,7 +33,7 @@ public class LiftInstance {
 
     private LiftConfig config;
 
-    private final Object lock = new Object();
+    private BlockingDeque<Object> alarmClock = new LinkedBlockingDeque<>();
     /**
      * 当前运行方向
      */
@@ -74,9 +77,7 @@ public class LiftInstance {
         } else {
             taskMap.get(DirectionEnum.DOWN).offer(task);
         }
-        synchronized (lock) {
-            lock.notifyAll();
-        }
+        alarmClock.add(new Object());
     }
 
     public void removeTask(final Task task) {
@@ -106,24 +107,23 @@ public class LiftInstance {
                 return;
             }
 
-            synchronized (lock) {
-                if (!hasTask()) {
-                    try {
-                        log.info("lift number:{},电梯状态: {},等待任务中...", number, liftStateRef.get());
-                        lock.wait(3000);
-                        continue;
-                    } catch (InterruptedException e) {
-                    }
-                }
+            log.info("lift number:{},电梯状态: {},等待任务中...", number, liftStateRef.get());
+            try {
+                alarmClock.poll(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                continue;
             }
             int to = 0;
-            liftStateRef.set(LiftStateEnum.RUNNING);
             //怎么执行任务
 
             PriorityQueue<Task> downQueue = taskMap.get(DirectionEnum.DOWN);
             Task downTask = downQueue.peek();
             PriorityQueue<Task> upQueue = taskMap.get(DirectionEnum.UP);
             Task upTask = upQueue.peek();
+            if (downTask==null && upTask==null) {
+                continue;
+            }
+            liftStateRef.set(LiftStateEnum.RUNNING);
             if (direction == DirectionEnum.UP) {
                 if (upTask == null) {
                     direction = DirectionEnum.IDLE;

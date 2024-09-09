@@ -8,8 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Collection;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.*;
 
 @Slf4j
 public class TaskDispatchService {
@@ -22,7 +23,7 @@ public class TaskDispatchService {
 
     private DispatchStrategyEnum dispatchStrategyEnum = DispatchStrategyEnum.OPT;
 
-    private final Object lock = new Object();
+    private BlockingDeque<Object> alarmClock = new LinkedBlockingDeque<>(4);
 
     public TaskDispatchService(Set<LiftInstance> instances) {
         this.instances = instances;
@@ -52,9 +53,7 @@ public class TaskDispatchService {
 
     public void addTask(Task task) {
         tasks.add(task);
-        synchronized (lock) {
-            lock.notifyAll();
-        }
+        alarmClock.add(new Object());
     }
 
     public void removeTask(Task task) {
@@ -78,29 +77,25 @@ public class TaskDispatchService {
      */
     public void dispatch() {
         while (true) {
-            synchronized (lock) {
-                if (tasks.isEmpty() || instances.isEmpty()) {
-                    log.info("调度等待中....");
-                    try {
-                        lock.wait();
-                        continue;
-                    } catch (InterruptedException e) {
-                    }
-                }
+            log.info("调度等待中....");
+            try {
+                alarmClock.poll(10,TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                continue;
             }
             //分发规则
             Optional<Task> opt = tasks.stream().findFirst();
             if (opt.isEmpty()) {
                 continue;
             }
-            log.info("task : {}", opt.get());
+            log.info("dispatch task : {}", opt.get());
             Task task = opt.get();
             TaskDispatchStrategy taskDispatchStrategy = dispatchStrategyEnum.getTaskDispatchStrategy();
             LiftInstance liftInstance = taskDispatchStrategy.selectLiftInstance(task, instances);
             if (liftInstance != null) {
                 liftInstance.registerTask(task);
                 tasks.remove(task);
-                log.info("task :{}, dispatch to liftInstance :{}", task, liftInstance.toString());
+                log.info("dispatch task :{}, dispatch to liftInstance :{}", task, liftInstance.toString());
             }
         }
     }
