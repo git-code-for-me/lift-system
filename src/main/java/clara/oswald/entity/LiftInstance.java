@@ -4,6 +4,7 @@ import clara.oswald.config.LiftConfig;
 import clara.oswald.enums.DirectionEnum;
 import clara.oswald.enums.LiftStateEnum;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
@@ -22,8 +23,6 @@ public class LiftInstance {
     private String number;
 
     private AtomicReference<LiftStateEnum> liftStateRef;
-
-    private LiftEntity liftEntity;
 
     private Map<DirectionEnum, PriorityQueue<Task>> taskMap = new HashMap<>();
 
@@ -44,6 +43,7 @@ public class LiftInstance {
      * 当前运行楼层
      */
     @Getter
+    @Setter
     private int n;
 
     public LiftInstance(String number) {
@@ -195,10 +195,6 @@ public class LiftInstance {
         }
     }
 
-    private void setN(int n) {
-        this.n = n;
-    }
-
     private void running(int from, final int to) {
         while (from != to) {
             log.info("lift({})运行中..,当前楼层:{}", number, getN());
@@ -223,16 +219,6 @@ public class LiftInstance {
 
     public LiftStateEnum getLiftState() {
         return liftStateRef.get();
-    }
-
-    private Boolean hasTask() {
-        AtomicReference<Boolean> hasTask = new AtomicReference<>(false);
-        taskMap.forEach((direction, p) -> {
-            if (!p.isEmpty()) {
-                hasTask.set(true);
-            }
-        });
-        return hasTask.get();
     }
 
     public List<Task> getTasks() {
